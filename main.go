@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -10,7 +11,7 @@ import (
 	"strings"
 )
 
-func streamConv(dst io.Writer, src io.Reader) error {
+func convertGopherToHTML(dst io.Writer, src io.Reader) error {
 	scanner := NewScanner(src)
 
 	fmt.Fprintf(dst, "<html><body><pre>\n")
@@ -68,6 +69,9 @@ func openGopher(URL *url.URL) (io.ReadCloser, error) {
 }
 
 func main() {
+	addr := flag.String("addr", ":7070", "address to listen on")
+	flag.Parse()
+
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error: file not found", http.StatusNotFound)
 	})
@@ -96,14 +100,15 @@ func main() {
 			return
 		}
 
-		if err := streamConv(w, resp); err != nil {
-			log.Printf("streamConv error: %s", err.Error())
+		if err := convertGopherToHTML(w, resp); err != nil {
+			log.Printf("convertGopherToHTML error: %s", err.Error())
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 	})
 
-	if err := http.ListenAndServe(":7070", nil); err != nil {
-		panic(err)
+	log.Printf("listening on %s", *addr)
+	if err := http.ListenAndServe(*addr, nil); err != nil {
+		log.Fatal(err)
 	}
 }
