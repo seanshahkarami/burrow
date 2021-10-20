@@ -4,7 +4,7 @@ Burrow is one of my projects to help me explore [Gopher](https://en.wikipedia.or
 
 ## Usage
 
-1. Build the server: `go build`
-1. Run the server `./burrow`
+1. Build the server. `go build`
+1. Start the server. `./burrow`
 2. Visit [the landing page](http://localhost:7070).
 3. Have fun exploring!
