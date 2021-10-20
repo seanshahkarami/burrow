@@ -41,7 +41,7 @@ func convertGopherToHTML(dst io.Writer, src io.Reader) error {
 			url := strings.TrimPrefix(scanner.Field(1), "URL:")
 			fmt.Fprintf(dst, "<p><a href=\"%s\">%s</a></p>\n", url, name)
 		default:
-			log.Printf("unknown code=%v fields=%v\n", scanner.Code(), scanner.Fields())
+			log.Printf("not supported yet: code=%v fields=%v\n", scanner.Code(), scanner.Fields())
 		}
 	}
 
