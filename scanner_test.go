@@ -28,6 +28,7 @@ func TestScannerCodeAndFields(t *testing.T) {
 			}
 			builder.WriteString(".\n")
 
+			// scan test text and compare results
 			scanner := NewScanner(bytes.NewBufferString(builder.String()))
 
 			for _, r := range tc {
