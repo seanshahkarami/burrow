@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/seanshahkarami/burrow/pkg/gopher"
 )
 
 func convertGopherToHTML(dst io.Writer, src io.Reader) error {
-	scanner := NewScanner(src)
+	scanner := gopher.NewScanner(src)
 
 	fmt.Fprintf(dst, "<html><body><pre>\n")
 
@@ -34,7 +35,7 @@ func convertGopherToHTML(dst io.Writer, src io.Reader) error {
 			}
 
 			name := scanner.Field(0)
-			path := fmt.Sprintf("/%s:%s%s%s", scanner.Field(2), scanner.Field(3), scanner.Field(1), suffix)
+			path := fmt.Sprintf("/burrow/%s:%s%s%s", scanner.Field(2), scanner.Field(3), scanner.Field(1), suffix)
 			fmt.Fprintf(dst, "<p>%s<a href=\"%s\">%s</a></p>\n", icon, path, name)
 		case "h":
 			name := scanner.Field(0)
@@ -54,60 +55,51 @@ func convertGopherToHTML(dst io.Writer, src io.Reader) error {
 	return nil
 }
 
-func openGopher(URL *url.URL) (io.ReadCloser, error) {
-	conn, err := net.Dial("tcp", URL.Host)
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "<html><body><p>Please start with one of the following sites:</p><ul><li><a href=\"/burrow/gopher.floodgap.com:70/\">gopher.floodgap.com</a></li></ul></body></html>\n")
+}
+
+func handleBurrow(w http.ResponseWriter, r *http.Request) {
+	log.Printf("burrowing to %v", r.URL)
+
+	gopherURL, err := url.Parse("gopher://" + strings.TrimPrefix(r.URL.Path, "./"))
 	if err != nil {
-		return nil, err
+		log.Printf("error creating gopher url %s", err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	if _, err := fmt.Fprintf(conn, "%s\r\n", URL.Path); err != nil {
-		conn.Close()
-		return nil, err
+	log.Printf("opening gopher resource %v", gopherURL)
+	resp, err := gopher.OpenURL(gopherURL)
+	if err != nil {
+		log.Printf("failed to open gopher site %s", err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer resp.Close()
+
+	// we stream files back as-is (maybe fancier later?)
+	if !strings.HasSuffix(gopherURL.Path, "/") {
+		log.Printf("serving file %v", r.URL)
+		io.Copy(w, resp)
+		return
 	}
 
-	return conn, nil
+	if err := convertGopherToHTML(w, resp); err != nil {
+		log.Printf("convertGopherToHTML error: %s", err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func main() {
 	addr := flag.String("addr", ":7070", "address to listen on")
 	flag.Parse()
 
-	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "error: file not found", http.StatusNotFound)
-	})
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			fmt.Fprintf(w, "<html><body><p>Please start with one of the following sites:</p><ul><li><a href=\"/gopher.floodgap.com:70/\">gopher.floodgap.com</a></li></ul></body></html>\n")
-			return
-		}
-
-		gopherURL, err := url.Parse("gopher://" + strings.TrimPrefix(r.URL.Path, "/"))
-		if err != nil {
-			return
-		}
-
-		resp, err := openGopher(gopherURL)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		defer resp.Close()
-
-		// we stream files back as-is (maybe fancier later?)
-		if !strings.HasSuffix(gopherURL.Path, "/") {
-			log.Printf("serving file %v", r.URL)
-			io.Copy(w, resp)
-			return
-		}
-
-		if err := convertGopherToHTML(w, resp); err != nil {
-			log.Printf("convertGopherToHTML error: %s", err.Error())
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	})
-
+	http.HandleFunc("/", handleIndex)
+	http.Handle("/burrow/", http.StripPrefix("/burrow/", http.HandlerFunc(handleBurrow)))
 	log.Printf("listening on %s", *addr)
+
 	if err := http.ListenAndServe(*addr, nil); err != nil {
 		log.Fatal(err)
 	}
